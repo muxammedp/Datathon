@@ -22,7 +22,8 @@ files.extend(root / 'scripts' / name for name in (
     'evaluate_full_context_2b.py',
     'package_internvideo_dataset.py',
 ))
-target = root / 'ForteVision-source.zip'
+target = root / 'artifacts' / 'ForteVision-source.zip'
+target.parent.mkdir(parents=True, exist_ok=True)
 with zipfile.ZipFile(target, 'w', zipfile.ZIP_DEFLATED) as archive:
     for path in sorted(set(files)):
         if not path.exists():

@@ -28,7 +28,8 @@ def main():
         manifest['videos'].append({'file': 'videos/' + Path(item['path']).name,
                                   'sha256': item['sha256'], 'label': item['label'],
                                   'event_times': item['event_times'], 'aliases': aliases[item['sha256']]})
-    target = ROOT / 'ForteVision-open-dataset.zip'
+    target = ROOT / 'artifacts' / 'ForteVision-open-dataset.zip'
+    target.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(target, 'w', zipfile.ZIP_DEFLATED, compresslevel=1) as archive:
         archive.writestr('open-dataset/manifest.json', json.dumps(manifest, ensure_ascii=False, indent=2))
         for item in items:
