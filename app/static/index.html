@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#4a0221">
+  <meta name="description" content="Локальный анализ кассовых операций с таймкодами и кадрами-доказательствами.">
+  <title>ForteVision — контроль кассовых операций</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+<svg class="icons" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Z"/><path d="m8 12 3 3 5-6"/></symbol>
+  <symbol id="i-video" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m10 9 5 3-5 3Z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6Z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></symbol>
+  <symbol id="i-code" viewBox="0 0 24 24"><path d="m8 6-6 6 6 6m8-12 6 6-6 6M14 3l-4 18"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V3m-5 5 5-5 5 5M4 16v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="m12 3 10 18H2L12 3Z"/><path d="M12 9v5m0 3v1"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+</svg>
+<aside class="sidebar">
+  <a class="brand" href="#analyze" aria-label="ForteVision, главная"><span class="wordmark">forte<span class="brand-dot">.</span></span><span class="brand-caption">VISION</span></a>
+  <div class="workspace-label">РАБОЧЕЕ ПРОСТРАНСТВО</div>
+  <nav aria-label="Основная навигация">
+    <a class="nav-item active" href="#analyze" data-page="analyze"><svg><use href="#i-grid"/></svg>Обзор и анализ<span class="nav-dot"></span></a>
+    <a class="nav-item" href="#rules" data-page="rules"><svg><use href="#i-file"/></svg>Правила проверки</a>
+    <a class="nav-item" href="#api" data-page="api"><svg><use href="#i-code"/></svg>API для жюри</a>
+  </nav>
+  <div class="sidebar-bottom">
+    <div class="local-card"><svg><use href="#i-lock"/></svg><strong>Внутри вашего контура</strong><p>Видео обрабатывается локально.<br>Без облачных AI-сервисов.</p><span><i></i> LOCAL INFERENCE</span></div>
+    <div class="project-label"><span class="project-avatar">FV</span><div><strong>ForteVision</strong><small>Datathon · прототип</small></div><span class="version">v1.0</span></div>
+  </div>
+</aside>
+<div class="shell">
+  <header class="topbar"><div class="breadcrumb">Рабочее пространство <span>/</span> <strong id="breadcrumbTitle">Обзор и анализ</strong></div><div class="header-right"><span class="health-pill" id="healthPill"><i></i><span>Подключение…</span></span><button class="access-button" id="accessButton"><svg><use href="#i-lock"/></svg><span>Доступ</span></button></div></header>
+  <main>
+    <section id="page-analyze" class="page">
+      <div class="page-heading"><div><div class="eyebrow">ВИДЕОАНАЛИТИКА КАССОВЫХ ОПЕРАЦИЙ</div><h1>Внимание к каждой операции<span>.</span></h1><p>От видеозаписи — к понятным событиям и проверяемым доказательствам.</p></div><span class="outline-label"><svg><use href="#i-shield"/></svg>Локальный анализ</span></div>
+      <div class="hero">
+        <div class="hero-copy"><span class="hero-tag"><span></span> FORTEVISION / INTELLIGENT REVIEW</span><h2>Видеть больше.<br>Проверять точнее.</h2><p>Загрузите запись кассы. Сервис подготовит фрагменты с таймкодами для просмотра. Автоматические выводы доступны только после проверки качества модели.</p><a href="#upload" class="hero-link">Начать проверку <svg><use href="#i-arrow"/></svg></a></div>
+        <div class="hero-art" aria-hidden="true"><div class="orb orb-back"></div><div class="orb orb-front"></div><div class="scan-window"><div class="scan-top"><span><i></i> VISION</span><span>LOCAL</span></div><div class="scan-symbol"><svg><use href="#i-shield"/></svg></div><div class="scan-line"></div><div class="scan-bottom"><div class="signal"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></div><span>FRAME ANALYSIS</span></div></div><div class="floating-label"><svg><use href="#i-check"/></svg>Данные остаются у вас</div></div>
+      </div>
+      <div class="workflow"><div><span class="step-number">01</span><div><strong>Загрузите видео</strong><small>MOV или MP4 · до 150 МБ</small></div><svg><use href="#i-upload"/></svg></div><div><span class="step-number">02</span><div><strong>Дождитесь анализа</strong><small>Локальная модель проверит кадры</small></div><svg><use href="#i-video"/></svg></div><div><span class="step-number">03</span><div><strong>Проверьте события</strong><small>Таймкод, контекст и ручная проверка</small></div><svg><use href="#i-shield"/></svg></div></div>
+      <div class="analysis-grid" id="upload">
+        <section class="panel upload-panel"><div class="panel-heading"><div><h2>Новая проверка</h2><p>Выберите запись кассовой операции</p></div><span class="muted-badge">ВИДЕО</span></div>
+          <div id="dropzone" class="dropzone"><div class="upload-icon"><svg><use href="#i-upload"/></svg></div><h3>Перетащите видео сюда</h3><p>или выберите файл на компьютере</p><label for="fileInput" class="button secondary">Выбрать видео</label><input id="fileInput" type="file" accept=".mov,.mp4,video/quicktime,video/mp4"><small>MOV, MP4 · до 150 МБ · до 3 минут</small></div>
+          <div id="selectedFile" class="selected-file" hidden><span class="file-icon"><svg><use href="#i-video"/></svg></span><div><strong id="fileName"></strong><small id="fileSize"></small></div><button class="icon-button" id="removeFile" aria-label="Убрать выбранный файл"><svg><use href="#i-close"/></svg></button></div>
+          <div class="upload-error" id="uploadError" role="alert" hidden></div>
+          <button id="analyzeButton" class="button primary full" disabled>Запустить анализ <svg><use href="#i-arrow"/></svg></button>
+          <p class="privacy-note"><svg><use href="#i-lock"/></svg>Исходное видео удаляется после обработки</p>
+        </section>
+        <aside class="panel scope-panel"><div class="panel-heading"><div><h2>Что проверять при просмотре</h2><p>Памятка по кассовым операциям</p></div></div><ul class="scope-list"><li><span class="scope-icon"><svg><use href="#i-grid"/></svg></span><div><strong>Рабочее место кассира</strong><p>Уход, личные вещи, смартфоны и хранение наличных</p></div></li><li><span class="scope-icon"><svg><use href="#i-video"/></svg></span><div><strong>Операции с наличными</strong><p>Пересчёт и присутствие клиента</p></div></li><li><span class="scope-icon"><svg><use href="#i-shield"/></svg></span><div><strong>Приём и передача ценностей</strong><p>Видимые повреждения сумок и упаковки</p></div></li></ul><a class="text-link" href="#rules">Все правила и нормативные источники <svg><use href="#i-arrow"/></svg></a><div class="review-note"><span>i</span><p id="qualityNotice">Автоматический вердикт приостановлен из-за ложных тревог и пропусков. Выделенный фрагмент не означает нарушение.</p></div></aside>
+      </div>
+      <section class="panel progress-panel" id="progressPanel" hidden aria-live="polite"><div class="progress-title"><div class="spinner"></div><div><h2 id="progressTitle">Загружаем видео</h2><p id="progressDetail">Передача в локальный сервис</p></div><strong id="progressPercent">0%</strong></div><progress aria-label="Ход анализа" id="progressBar" max="100" value="0"></progress><div class="progress-footer"><span>Видео не передаётся во внешние AI-сервисы</span><span id="elapsed">00:00</span></div></section>
+      <section id="results" hidden aria-live="polite"><div class="result-heading"><div><div class="eyebrow">РЕЗУЛЬТАТ ПРОВЕРКИ</div><h2 id="verdictTitle"></h2></div><div class="result-actions"><button class="button secondary compact" id="exportButton"><svg><use href="#i-file"/></svg>Скачать JSON</button><button class="button secondary compact" id="deleteButton">Удалить результат</button></div></div><div class="result-summary" id="resultSummary"></div><div class="result-layout"><div class="panel player-panel"><video id="videoPlayer" controls playsinline preload="metadata"></video><div id="videoFallback" hidden>Браузер не поддерживает кодек этого видео. Используйте кадры-доказательства ниже или откройте оригинал в видеоплеере.</div><div class="player-caption"><svg><use href="#i-video"/></svg><span id="resultFilename"></span><span id="videoDuration"></span></div><div id="timeline" class="timeline" aria-label="События на временной шкале"></div><div class="timeline-labels"><span>00:00</span><span id="timelineEnd"></span></div></div><div id="events" class="event-list"></div></div><p class="analysis-notice" id="analysisNotice"></p></section>
+      <footer><span>ForteVision · Datathon 2026</span><span>Локальная обработка. Проверяемые выводы.</span></footer>
+    </section>
+    <section id="page-rules" class="page" hidden><div class="eyebrow">НОРМАТИВНАЯ БАЗА</div><h1>Правила для проверки операций<span>.</span></h1><p class="page-intro">Это справочник для ручной проверки. Модель не подтверждает конкретный пункт правил, банковские проводки, подлинность документов или личность людей.</p><div class="source-banner"><svg><use href="#i-file"/></svg><div><strong>Постановление Правления НБРК № 231 от 29 ноября 2019 года</strong><p>Правила осуществления кассовых операций и операций по инкассации банкнот, монет и ценностей</p><a href="https://adilet.zan.kz/rus/docs/V1900019680" target="_blank" rel="noreferrer">Открыть в ИПС «Әділет» ↗</a></div></div><div id="rulesList" class="rules-grid"></div><p class="analysis-notice">Текст сверен по публичной копии с изменениями на 12.07.2026. Перед внедрением необходимо сверить актуальную официальную редакцию. Отсутствие действия между выборочными кадрами не доказывает нарушение.</p></section>
+    <section id="page-api" class="page" hidden><div class="eyebrow">ИНТЕГРАЦИЯ</div><h1>Один файл. Один запрос<span>.</span></h1><p class="page-intro">API для автоматической проверки жюри. Загрузите видео и получите результат по идентификатору задания.</p><div class="api-grid"><article class="panel api-panel"><span class="method">POST</span><h2>/api/v1/analyze</h2><p>Передайте MOV в multipart-поле <code>file</code>. Сервер вернёт <code>job_id</code> и HTTP 202.</p><pre id="curlExample"></pre><button id="copyApi" class="button secondary compact">Копировать пример</button></article><article class="panel api-panel"><span class="method get">GET</span><h2>/api/v1/jobs/{job_id}</h2><p>Опросите статус: <code>processing</code>, <code>done</code> или <code>failed</code>.</p><pre>{
+  "job_id": "…",
+  "status": "done",
+  "verdict": "no_violation",
+  "violations": []
+}</pre></article></div><div class="panel api-details"><h2>Доступ и обработка</h2><dl><div><dt>Авторизация</dt><dd>Заголовок X-API-Key. Без верного ключа — HTTP 401.</dd></div><div><dt>Файл</dt><dd>MOV / MP4, до 150 МБ, длительность до 180 секунд.</dd></div><div><dt>Результат</dt><dd>Вердикт, события, таймкоды и 1–3 JPEG-кадра в base64 для каждого события.</dd></div><div><dt>Занятость сервиса</dt><dd>Одна GPU-задача одновременно. Повторный запрос — HTTP 429.</dd></div><div><dt>Хранение</dt><dd>Исходник удаляется после анализа. Результат доступен 24 часа; его можно удалить раньше.</dd></div></dl><a class="text-link" href="/openapi.json" target="_blank">Схема OpenAPI ↗</a></div></section>
+  </main>
+</div>
+<dialog id="accessDialog" aria-labelledby="accessTitle"><form id="accessForm"><div class="dialog-heading"><span class="file-icon"><svg><use href="#i-lock"/></svg></span><button type="button" class="icon-button" id="closeDialog" aria-label="Закрыть"><svg><use href="#i-close"/></svg></button></div><h2 id="accessTitle">Доступ к проверкам</h2><p>Введите API-ключ вашего локального сервиса. Он находится в файле <code>data/api-key.txt</code>.</p><label for="apiKey">API-ключ</label><input id="apiKey" type="password" autocomplete="off" required placeholder="Вставьте ключ доступа"><p id="authError" class="upload-error" role="alert" hidden></p><button type="submit" class="button primary full">Подключиться <svg><use href="#i-arrow"/></svg></button><small>Ключ хранится только в памяти этой вкладки.</small></form></dialog>
+<dialog id="frameDialog" aria-labelledby="frameCaption"><button class="icon-button" id="closeFrame" aria-label="Закрыть кадр"><svg><use href="#i-close"/></svg></button><img id="largeFrame" alt="Кадр-доказательство"><p id="frameCaption"></p></dialog>
+<div id="toast" role="status" hidden></div>
+</body>
+</html>

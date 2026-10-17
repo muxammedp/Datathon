@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+.pytest_cache/
+models/
+data/
+data/jobs/
+data/api-key.txt
+data/*.html
+data/evaluation/
+*.log
+*.zip

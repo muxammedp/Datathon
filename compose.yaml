@@ -1,0 +1,14 @@
+services:
+  fortevision:
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./models:/srv/fortevision/models:ro
+      - ./data:/srv/fortevision/data
+    environment:
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
+    gpus: all
+    restart: unless-stopped

@@ -1,0 +1,81 @@
+{
+  "repo": "OpenGVLab/InternVideo2_5_Chat_8B",
+  "revision": "87680fe232af8681b55322f68541679b91f99df1",
+  "files": {
+    "added_tokens.json": {
+      "size": 340
+    },
+    "all_results.json": {
+      "size": 199
+    },
+    "config.json": {
+      "size": 5585,
+      "sha256": "e2be1c6e312b409d1c04e8413d291ba03efe5f7bcf053db26528f62030ee67d6"
+    },
+    "configuration_intern_vit.py": {
+      "size": 5548,
+      "sha256": "22dd687a5f142985407675fc6b1dc688c2ded93e54192543ecf28ef495a6efa8"
+    },
+    "configuration_internlm2.py": {
+      "size": 7005,
+      "sha256": "9f9e14d64be7b81068e8421fd27e1c466b3fb6aeb67725ca328e56083c3f7a60"
+    },
+    "configuration_internvl_chat.py": {
+      "size": 4025,
+      "sha256": "16fabedaec80b03ff5459c36fdd8a5923f3811dcd7b4e9b52c7593a9da25ee1e"
+    },
+    "conversation.py": {
+      "size": 15309,
+      "sha256": "b1b9f280e9cb9211e519e2b8071002b57cc742aadb2f49b05fa674ee3c7d83ee"
+    },
+    "generation_config.json": {
+      "size": 115
+    },
+    "model-00001-of-00004.safetensors": {
+      "size": 4940026512,
+      "sha256": "57bfde1ac310522099ffc557f8df87106d2d515ffa4d2b10ebf6e226134bbb71"
+    },
+    "model-00002-of-00004.safetensors": {
+      "size": 4915914584,
+      "sha256": "3d49395592ce9feb0e09221b4c9016bc1cd088a55897c2695120d99a56cf592b"
+    },
+    "model-00003-of-00004.safetensors": {
+      "size": 4915914592,
+      "sha256": "b853a8ea73dc64d93a27ecb71ad4b4dad98f3fbde5e92a48e025ec38c8a50a06"
+    },
+    "model-00004-of-00004.safetensors": {
+      "size": 2030206836,
+      "sha256": "dd44e8d5e8514e5e8f5399df55f9be13f4bc92e6847c2d9103a1d281fd99d06c"
+    },
+    "model.safetensors.index.json": {
+      "size": 51167
+    },
+    "modeling_intern_vit.py": {
+      "size": 18063,
+      "sha256": "619c2b96987bf45018a32d8abd16e7f7036995c16e1bd762c3507d58b8fdb672"
+    },
+    "modeling_internlm2.py": {
+      "size": 61208,
+      "sha256": "c014d933c6afdf7414791c1859c692ca4b49c925688bcc00fbd1658ef75fb0ba"
+    },
+    "modeling_internvl_chat_hico2.py": {
+      "size": 19426,
+      "sha256": "2470a829aef317293b1ab7d62101b380e398b975b890fdd68ea4a01896089c2e"
+    },
+    "special_tokens_map.json": {
+      "size": 844
+    },
+    "tokenization_internlm2.py": {
+      "size": 8791,
+      "sha256": "e548dc777a1def2f5339cfe12de8da2d12500d664e3dafa5c585c407e4b806fa"
+    },
+    "tokenizer.model": {
+      "size": 1477754,
+      "sha256": "f868398fc4e05ee1e8aeba95ddf18ddcc45b8bce55d5093bead5bbf80429b48b"
+    },
+    "tokenizer_config.json": {
+      "size": 5238
+    }
+  },
+  "custom_code_review": "Imports and model loading/generation inspected; full security audit not performed."
+}

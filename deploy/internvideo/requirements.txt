@@ -1,0 +1,13 @@
+transformers==4.37.2
+accelerate==0.34.2
+huggingface-hub==0.36.2
+safetensors==0.4.5
+numpy==1.26.4
+opencv-python-headless==4.10.0.84
+pillow==10.4.0
+timm==0.9.16
+einops==0.8.0
+sentencepiece==0.2.0
+protobuf==4.25.5
+psutil==6.1.1
+
