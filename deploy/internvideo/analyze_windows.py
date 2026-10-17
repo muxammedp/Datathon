@@ -60,22 +60,33 @@ def main():
             if args.fold not in range(5):
                 raise ValueError('Adapter fold must be between 0 and 4')
             trained_protocol = json.loads((args.adapter_run / 'protocol.json').read_text(encoding='utf8'))
-            if trained_protocol.get('version') != 'internvideo_events_v1':
-                raise ValueError('This analysis requires an events-v1 adapter, not a whole-video adapter')
+            version = trained_protocol.get('version')
+            if version not in ('internvideo_events_v1', 'internvideo_events_v3'):
+                raise ValueError('This analysis requires an event adapter, not a whole-video adapter')
             if trained_protocol['model_revision'] != protocol['model_revision']:
                 raise ValueError('Adapter base model revision mismatch')
+            sampling = (trained_protocol['input_cache']['source_settings'] if version == 'internvideo_events_v3'
+                        else trained_protocol['settings'])
+            extractor = (trained_protocol['input_cache']['extractor_sha256'] if version == 'internvideo_events_v3'
+                         else trained_protocol['code_sha256'])
             for key in ('window_sec', 'overlap_sec', 'fps', 'detail_frames', 'history_frames'):
-                if getattr(args, key) != trained_protocol['settings'][key]:
+                if getattr(args, key) != sampling[key]:
                     raise ValueError('Sampling settings differ from adapter training: ' + key)
             for name in ('lora_binary.py', 'event_cache.py', 'video_windows.py', 'analyze.py'):
-                if file_hash(root / name) != trained_protocol['code_sha256'][name]:
+                if file_hash(root / name) != extractor[name]:
                     raise ValueError('Inference code differs from adapter training: ' + name)
+            if version == 'internvideo_events_v3':
+                for name in ('event_learning.py', 'train_events_v3.py'):
+                    if file_hash(root / name) != trained_protocol['code_sha256'][name]:
+                        raise ValueError('FP32 inference code differs from adapter training: ' + name)
             folder = args.adapter_run / f'fold-{args.fold}'
             metadata = json.loads((folder / 'result.json').read_text(encoding='utf8'))
             if file_hash(folder / 'adapter.safetensors') != metadata['adapter_sha256']:
                 raise ValueError('Adapter checksum mismatch')
             from safetensors.torch import load_file
             from lora_binary import attach_adapters, binary_logits, frozen_inputs, restore_adapter
+            if version == 'internvideo_events_v3':
+                from train_events_v3 import binary_logits
             from event_cache import binary_prompt
             model.requires_grad_(False)
             attach_adapters(model.language_model, trained_protocol['settings']['last_layers'],

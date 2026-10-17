@@ -5,7 +5,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 files = [root / name for name in (
-    'README.md', 'VALIDATION.md', 'VALIDATION-INITIAL.md', 'requirements.txt', 'requirements-research.txt', 'setup.ps1', 'start.ps1',
+    'README.md', 'MODEL_CARD.md', 'VALIDATION.md', 'VALIDATION-INITIAL.md', 'requirements.txt', 'requirements-research.txt', 'setup.ps1', 'start.ps1',
     'Start.cmd', 'Dockerfile', 'compose.yaml', '.gitignore', '.dockerignore', '.gitattributes', 'pytest.ini',
 )]
 for directory in ('app', 'tests', 'deploy'):
