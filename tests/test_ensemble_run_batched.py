@@ -92,14 +92,15 @@ def runner(tmp_path, monkeypatch):
             state.previous.append(copy.deepcopy(previous_results))
             payload = dict(version=batched.VERSION, video_sha256=index['video_sha256'], windows=[],
                            settings=dict(max_frames=self.max_frames, max_new_tokens=self.max_new_tokens,
-                                         max_pixels=qwen.MAX_PIXELS, view_batch_size=2, execution='batched_views_v1'))
+                                         max_pixels=qwen.MAX_PIXELS, view_batch_size=2, execution='batched_views_v2',
+                                         observations_version='observations_v2', max_observation_events=64))
             for window in index['windows']:
                 failed = state.fail and window['index'] == 1
                 payload['windows'].append(dict(index=window['index'], start_sec=window['start_sec'],
                                                end_sec=window['end_sec'], status='failed' if failed else 'done',
                                                score=None if failed else .2, context_score=None if failed else .1,
                                                cash_score=None if failed else .3, elapsed_sec=1.234,
-                                               profile=dict(execution='batched_views_v1', view_batch_size=2)))
+                                               profile=dict(execution='batched_views_v2', view_batch_size=2)))
                 if on_window:
                     on_window(payload)
             return payload
@@ -141,14 +142,14 @@ def test_real_media_action_reused_as_independent_copies_but_old_qwen_never_reuse
                    for name in ('common.py', 'run.py', 'media_tracking.py', 'action_expert.py', 'qwen_expert.py')}
     tracker, action = runner.state.tracker_calls, runner.state.action_calls
     fingerprint = extract(runner, reuse_from=runner.old_output)
-    assert fingerprint['version'] == 'forte_specialists_batched_v1'
-    assert set(fingerprint['source_hashes']) == {*code_before, 'run_batched.py', 'qwen_batched.py'}
+    assert fingerprint['version'] == 'forte_specialists_batched_v2'
+    assert set(fingerprint['source_hashes']) == {*code_before, 'run_batched.py', 'qwen_batched.py', 'observation_schema.py'}
     assert runner.state.tracker_calls == tracker and runner.state.action_calls == action
     assert runner.state.batch_calls == 1 and runner.state.previous == [None]
     assert before == hashes(runner.old_output)
     new_dir = runner.output / 'videos' / runner.identity
     payload = runner.module.load_payload(new_dir / 'qwen.json', fingerprint['fingerprint'])
-    assert payload['version'] == 'qwen_batched_v1' and payload['windows'][0]['score'] == .2
+    assert payload['version'] == 'qwen_batched_v2' and payload['windows'][0]['score'] == .2
     assert hashes(old_dir / 'media') == hashes(new_dir / 'media')
     copied = next((new_dir / 'media/frames').iterdir())
     copied.write_bytes(b'copy isolation verified')
@@ -252,7 +253,7 @@ def test_failed_batch_persists_partial_and_retry_receives_only_new_backend_parti
         extract(runner, reuse_from=runner.old_output)
     partial_path = runner.output / 'videos' / runner.identity / 'qwen.partial.json'
     partial = runner.module.read_json(partial_path)['payload']
-    assert partial['version'] == 'qwen_batched_v1' and partial['windows'][1]['score'] is None
+    assert partial['version'] == 'qwen_batched_v2' and partial['windows'][1]['score'] is None
     assert not (runner.output / 'complete.json').exists()
     assert not (runner.output / '.ensemble.lock').exists()
     runner.state.fail = False

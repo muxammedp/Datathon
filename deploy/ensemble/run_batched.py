@@ -16,9 +16,11 @@ from deploy.ensemble.run import check_windows, event, protocol as original_proto
 def protocol(settings, camera):
     value = original_protocol(settings, camera)
     value.pop('fingerprint')
-    value['version'] = 'forte_specialists_batched_v1'
-    value['execution'] = dict(qwen_version='qwen_batched_v1', view_batch_size=2)
-    value['source_hashes'].update({name: file_hash(HERE / name) for name in ('qwen_batched.py', 'run_batched.py')})
+    value['version'] = 'forte_specialists_batched_v2'
+    value['execution'] = dict(qwen_version='qwen_batched_v2', view_batch_size=2,
+                              observations_version='observations_v2', max_observation_events=64)
+    value['source_hashes'].update({name: file_hash(HERE / name) for name in
+                                   ('qwen_batched.py', 'run_batched.py', 'observation_schema.py')})
     return dict(value, fingerprint=digest(value))
 
 
@@ -89,11 +91,13 @@ def _check_action(payload, media):
 def _check_qwen(payload, media, settings):
     from deploy.ensemble.qwen_batched import VERSION
     from deploy.ensemble.qwen_expert import MAX_PIXELS
+    from deploy.ensemble import observation_schema as observations
     check_windows(payload, media)
     if payload.get('version') != VERSION:
         raise ValueError('Qwen cache does not belong to the batched backend')
     expected = dict(max_frames=settings['qwen_frames'], max_new_tokens=settings['qwen_new_tokens'],
-                    max_pixels=MAX_PIXELS, view_batch_size=2, execution='batched_views_v1')
+                    max_pixels=MAX_PIXELS, view_batch_size=2, execution='batched_views_v2',
+                    observations_version=observations.VERSION, max_observation_events=observations.MAX_EVENTS)
     if payload.get('settings') != expected:
         raise ValueError('Qwen cache has incompatible batch settings')
 

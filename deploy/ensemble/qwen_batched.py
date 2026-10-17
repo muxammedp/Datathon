@@ -1,10 +1,13 @@
 import math
+import re
 import time
+from pathlib import Path
 
 from deploy.ensemble import qwen_expert as base
+from deploy.ensemble import observation_schema as observations
 
 
-VERSION = 'qwen_batched_v1'
+VERSION = 'qwen_batched_v2'
 VIEWS = ('context', 'cash')
 
 
@@ -87,7 +90,7 @@ class BatchedQwenExpert(base.QwenExpert):
         facts, statuses = [], []
         for text, window in zip(texts, windows):
             try:
-                facts.append(base.validate_observations(text, window))
+                facts.append(observations.validate_observations(text, window))
                 statuses.append('valid')
             except (ValueError, TypeError, KeyError):
                 facts.append(base.unknown_observations())
@@ -158,7 +161,7 @@ class BatchedQwenExpert(base.QwenExpert):
                         actor_roles_verified=False, memory_verified=False, evidence_frames=evidence,
                         review_required=bool(reasons), review_reasons=reasons, view_disagreement=disagreement,
                         production_approved=False, model_passes=2, elapsed_sec=round(time.monotonic() - began, 3),
-                        profile=dict(execution='batched_views_v1', view_batch_size=2,
+                        profile=dict(execution='batched_views_v2', view_batch_size=2,
                                      image_preparation_sec=round(prepared - began, 3),
                                      risk_sec=round(risk_finished - prepared, 3),
                                      facts_sec=round(facts_finished - risk_finished, 3),
@@ -168,16 +171,69 @@ class BatchedQwenExpert(base.QwenExpert):
                 picture.close()
 
     def analyze(self, index, root, previous_results=None, on_window=None):
-        old_settings = dict(max_frames=self.max_frames, max_new_tokens=self.max_new_tokens, max_pixels=base.MAX_PIXELS)
-        settings = dict(old_settings, view_batch_size=2, execution='batched_views_v1')
-        previous = None
+        import torch
+        root = Path(root).resolve()
+        identity = index.get('video_sha256')
+        if not isinstance(identity, str) or not re.fullmatch('[0-9a-f]{64}', identity):
+            raise ValueError('Media index requires a video SHA256')
+        windows = [base._window(raw, root, self.max_frames) for raw in index.get('windows', [])]
+        if (not windows or [w['index'] for w in windows] != list(range(len(windows)))
+                or any(b['start_sec'] <= a['start_sec'] for a, b in zip(windows, windows[1:]))):
+            raise ValueError('Media windows must be indexed in chronological order')
+        settings = dict(max_frames=self.max_frames, max_new_tokens=self.max_new_tokens,
+                        max_pixels=base.MAX_PIXELS, view_batch_size=2, execution='batched_views_v2',
+                        observations_version=observations.VERSION, max_observation_events=observations.MAX_EVENTS)
+        result = dict(version=VERSION, video_sha256=identity, settings=settings, windows=[], production_approved=False)
+        previous = {}
         if previous_results is not None:
-            if previous_results.get('version') != VERSION or previous_results.get('settings') != settings:
+            if (previous_results.get('version') != VERSION or previous_results.get('video_sha256') != identity
+                    or previous_results.get('settings') != settings):
                 raise ValueError('Previous expert result belongs to a different execution or configuration')
-            previous = dict(previous_results, version=base.VERSION, settings=old_settings)
-
-        def current(payload):
-            return dict(payload, version=VERSION, settings=settings)
-
-        callback = (lambda value: on_window(current(value))) if on_window is not None else None
-        return current(super().analyze(index, root, previous_results=previous, on_window=callback))
+            for row in previous_results.get('windows', []):
+                number = row.get('index')
+                if type(number) is not int or number in previous or not 0 <= number < len(windows):
+                    raise ValueError('Invalid previous window index')
+                window = windows[number]
+                if row.get('start_sec') != window['start_sec'] or row.get('end_sec') != window['end_sec']:
+                    raise ValueError('Previous result time bounds changed')
+                if row.get('status') == 'done':
+                    scores = [base._number(row[key]) for key in ('score', 'context_score', 'cash_score')]
+                    if not math.isclose(scores[0], (scores[1] + scores[2]) / 2, rel_tol=1e-9, abs_tol=1e-9):
+                        raise ValueError('Previous specialist scores are inconsistent')
+                    for view in VIEWS:
+                        value = observations.validate_observations(row['observations'][view], base._view_window(window, view))
+                        if value != row['observations'][view]:
+                            raise ValueError('Previous observations must already have their canonical form')
+                    previous[number] = row
+            prefix = {}
+            for number in range(len(windows)):
+                if number not in previous:
+                    break
+                prefix[number] = previous[number]
+            previous = prefix
+        for window in windows:
+            memory = base._memory(result['windows'], window['start_sec'])
+            if window['index'] in previous:
+                row = dict(previous[window['index']])
+            else:
+                try:
+                    row = self._analyze_window(window, memory)
+                except Exception as exc:
+                    row = dict(index=window['index'], start_sec=window['start_sec'], end_sec=window['end_sec'],
+                               status='failed', score=None, context_score=None, cash_score=None,
+                               observations=dict(context=base.unknown_observations(), cash=base.unknown_observations()),
+                               parse_status=dict(context='not_completed', cash='not_completed'),
+                               error_type=type(exc).__name__, review_required=True,
+                               review_reasons=['specialist_processing_failed'], production_approved=False)
+                    row['memory'] = dict(recent_events=memory, verified=False)
+                    result['windows'].append(row)
+                    if on_window is not None:
+                        on_window(result)
+                    if isinstance(exc, torch.cuda.OutOfMemoryError) or 'out of memory' in str(exc).lower():
+                        raise
+                    continue
+            row['memory'] = dict(recent_events=memory, verified=False)
+            result['windows'].append(row)
+            if on_window is not None:
+                on_window(result)
+        return result

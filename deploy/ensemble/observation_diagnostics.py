@@ -16,6 +16,8 @@ ERROR_CODES = {
     'Unexpected actor fields': 'unexpected_actor_fields',
     'Hallucinated actor identity or activity': 'unknown_actor_or_activity',
     'Too many observation events': 'invalid_event_list',
+    'Observation events must be a list or a complete event object': 'invalid_event_list_type',
+    'Observation event count exceeds the limit of 64': 'event_list_over_budget',
     'Unexpected event fields': 'unexpected_event_fields',
     'Event is outside the sampled evidence or closed vocabulary': 'invalid_event_time_kind_or_tracks',
     'Hallucinated event track ID': 'unknown_event_track_id',
@@ -23,6 +25,26 @@ ERROR_CODES = {
 }
 WHOLE_JSON_FENCE = re.compile(r'\A```json[ \t]*\r?\n([\s\S]*?)\r?\n```\Z')
 _active = False
+
+
+def _structure(raw):
+    value = raw
+    if isinstance(raw, str):
+        try:
+            value = json.loads(raw)
+        except (ValueError, TypeError, RecursionError):
+            return dict(events_type='unavailable', event_list_count=None)
+    if not isinstance(value, dict):
+        return dict(events_type='unavailable', event_list_count=None)
+    if 'events' not in value:
+        return dict(events_type='missing', event_list_count=None)
+    events = value['events']
+    if isinstance(events, list):
+        return dict(events_type='list', event_list_count=len(events))
+    kind = ('object' if isinstance(events, dict) else 'string' if isinstance(events, str)
+            else 'null' if events is None else 'boolean' if isinstance(events, bool)
+            else 'number' if isinstance(events, (int, float)) else 'other')
+    return dict(events_type=kind, event_list_count=None)
 
 
 def _error(exc):
@@ -44,12 +66,14 @@ def _error(exc):
 
 
 @contextmanager
-def trace_validation():
+def trace_validation(validator_module=base):
     global _active
     if _active:
         raise RuntimeError('Validation tracing is already active in this process')
+    original = getattr(validator_module, 'validate_observations', None)
+    if not callable(original):
+        raise TypeError('Diagnostic validator module must provide a callable validate_observations')
     _active = True
-    original = base.validate_observations
     records = []
 
     def traced(raw, window):
@@ -59,7 +83,7 @@ def trace_validation():
                       char_count=len(raw) if text is not None else None,
                       starts_with_json_fence=bool(text is not None and text.startswith('```json')),
                       ends_with_fence=bool(text is not None and text.endswith('```')),
-                      fence_probe=dict(attempted=False))
+                      fence_probe=dict(attempted=False), **_structure(raw))
         try:
             value = original(raw, window)
         except Exception as exc:
@@ -77,13 +101,15 @@ def trace_validation():
             records.append(record)
             raise
         else:
-            record.update(strict_valid=True, code='valid')
+            events = value.get('events') if isinstance(value, dict) else None
+            record.update(strict_valid=True, code='valid',
+                          accepted_event_count=len(events) if isinstance(events, list) else None)
             records.append(record)
             return value
 
-    base.validate_observations = traced
+    validator_module.validate_observations = traced
     try:
         yield records
     finally:
-        base.validate_observations = original
+        validator_module.validate_observations = original
         _active = False

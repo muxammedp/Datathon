@@ -4,6 +4,7 @@ import pytest
 
 from deploy.ensemble import diagnose_qwen as diagnostic
 from deploy.ensemble import qwen_expert as base
+from deploy.ensemble import observation_schema as observations
 
 
 def test_diagnostic_preserves_validator_and_cache_and_exports_no_observation_text(tmp_path, monkeypatch):
@@ -26,7 +27,7 @@ def test_diagnostic_preserves_validator_and_cache_and_exports_no_observation_tex
         def _analyze_window(self, *args):
             for _ in range(2):
                 with pytest.raises(ValueError):
-                    base.validate_observations('private scene output', {})
+                    observations.validate_observations('private scene output', {})
             return dict(parse_status=dict(context='invalid_json_or_schema', cash='invalid_json_or_schema'),
                         elapsed_sec=1., profile=dict(generated_tokens=[20, 20]),
                         observations=dict(private='another secret'))
@@ -35,10 +36,10 @@ def test_diagnostic_preserves_validator_and_cache_and_exports_no_observation_tex
             released.append(True)
 
     monkeypatch.setattr(diagnostic, 'BatchedQwenExpert', Expert)
-    original = base.validate_observations
+    original = observations.validate_observations
     args = SimpleNamespace(cache=cache, models=models, output=tmp_path / 'report.json', video_sha=None)
     report = diagnostic.diagnose(args)
-    assert base.validate_observations is original and released == [True]
+    assert observations.validate_observations is original and released == [True]
     assert report['validation_calls'] == 2
     assert [row['view'] for row in report['diagnostics']] == ['context', 'cash']
     assert sentinel.read_text() == 'existing extraction'

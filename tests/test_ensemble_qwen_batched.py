@@ -146,6 +146,60 @@ def test_oom_reports_incomplete_window_then_raises_without_serial_fallback(media
     assert saved[0]['windows'][0]['status'] == 'failed'
 
 
+def test_long_valid_event_list_survives_evidence_resume_and_bounded_memory(media, monkeypatch):
+    root, index = media
+    second = copy.deepcopy(index['windows'][0])
+    second.update(index=1, start_sec=3., end_sec=6., times=[3., 4., 5.])
+    for track in second['tracks']:
+        track['samples'][0]['time_sec'] = 4.
+    index['windows'].append(second)
+    instance = batched.BatchedQwenExpert(root)
+    stub_batch(instance, monkeypatch)
+    calls, checkpoints = [], []
+
+    def generated(images, windows, prompts):
+        calls.append(True)
+        texts = []
+        for window in windows:
+            value = facts()
+            value['events'] = [dict(kind=kind, time_sec=timestamp, track_ids=[7])
+                               for timestamp in window['times']
+                               for kind in ('cash_counting_visible', 'cash_handover_visible', 'phone_visible')]
+            texts.append(json.dumps(value))
+        return texts, dict(model_calls=1, generated_tokens=[200, 200])
+
+    monkeypatch.setattr(instance, '_generate_facts', generated)
+    complete = instance.analyze(index, root, on_window=lambda p: checkpoints.append(copy.deepcopy(p)))
+    first = complete['windows'][0]
+    assert first['parse_status'] == dict(context='valid', cash='valid')
+    assert len(first['observations']['context']['events']) == 9
+    assert len(first['evidence_frames']) == 18
+    assert len(complete['windows'][1]['memory']['recent_events']) == 8
+    assert complete['settings']['max_observation_events'] == 64
+    assert base.MAX_EVENTS == 8
+    with pytest.raises(ValueError, match='Too many observation events'):
+        base.validate_observations(first['observations']['context'], base._window(index['windows'][0], root, 16))
+    calls.clear()
+    resumed = instance.analyze(index, root, previous_results=checkpoints[0])
+    assert len(calls) == 1 and resumed['windows'][0] == first
+    assert resumed['windows'][1]['memory'] == complete['windows'][1]['memory']
+    legacy = dict(checkpoints[0], version='qwen_batched_v1')
+    with pytest.raises(ValueError, match='different execution'):
+        instance.analyze(index, root, previous_results=legacy)
+
+
+def test_resumed_extended_event_list_validates_the_ninth_event(media, monkeypatch):
+    root, index = media
+    instance = batched.BatchedQwenExpert(root)
+    stub_batch(instance, monkeypatch)
+    result = instance.analyze(index, root)
+    events = result['windows'][0]['observations']['context']['events']
+    events.extend(copy.deepcopy(events[0]) for _ in range(8))
+    events[-1]['track_ids'] = [999]
+    with pytest.raises(ValueError, match='Hallucinated event track ID'):
+        instance.analyze(index, root, previous_results=result)
+
+
 @pytest.mark.parametrize('device', ['cpu', 'cuda'])
 def test_native_tiny_qwen_batch_matches_serial_with_left_padding_and_image_association(tmp_path, device):
     from transformers import AutoProcessor, Qwen3VLConfig, Qwen3VLForConditionalGeneration

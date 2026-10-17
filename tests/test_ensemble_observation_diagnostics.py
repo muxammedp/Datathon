@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -109,3 +110,106 @@ def test_validator_restored_after_context_failure_and_nested_tracing_is_rejected
     with diagnostics.trace_validation() as records:
         base.validate_observations(valid(), window())
     assert records[0]['code'] == 'valid'
+
+
+@pytest.mark.parametrize('events,kind,count', [
+    ([], 'list', 0),
+    ([{'kind': 'private_scene_description'}] * 9, 'list', 9),
+    ({'private_scene_description': 'private_scene_description'}, 'object', None),
+    ('private_scene_description', 'string', None),
+    (None, 'null', None),
+    (False, 'boolean', None),
+    (123., 'number', None),
+])
+def test_event_structural_metadata_never_exports_values(events, kind, count):
+    value = dict(valid(), events=events)
+    with diagnostics.trace_validation() as records:
+        try:
+            base.validate_observations(json.dumps(value), window())
+        except (ValueError, TypeError, KeyError):
+            pass
+    assert records[0]['events_type'] == kind and records[0]['event_list_count'] == count
+    assert 'private_scene_description' not in json.dumps(records)
+
+
+def test_schema_v2_observes_all_events_and_restores_only_selected_validator():
+    from deploy.ensemble import observation_schema
+    event = dict(kind='cash_counting_visible', time_sec=0., track_ids=[])
+    value = dict(valid(), events=[dict(event) for _ in range(12)])
+    original, original_base = observation_schema.validate_observations, base.validate_observations
+    with diagnostics.trace_validation(validator_module=observation_schema) as records:
+        result = observation_schema.validate_observations(json.dumps(value), window())
+        assert base.validate_observations is original_base
+        with pytest.raises(RuntimeError, match='already active'):
+            with diagnostics.trace_validation():
+                pass
+    assert len(records) == 1 and result == value
+    assert records[0]['strict_valid'] and records[0]['accepted_event_count'] == 12
+    assert records[0]['events_type'] == 'list' and records[0]['event_list_count'] == 12
+    assert observation_schema.validate_observations is original
+    assert base.validate_observations is original_base
+
+
+def test_schema_v2_single_event_object_is_reported_without_recording_event_content():
+    from deploy.ensemble import observation_schema
+    event = dict(kind='cash_counting_visible', time_sec=0., track_ids=[])
+    value = dict(valid(), events=event)
+    with diagnostics.trace_validation(validator_module=observation_schema) as records:
+        result = observation_schema.validate_observations(value, window())
+    assert result['events'] == [event] and value['events'] == event
+    assert records[0]['events_type'] == 'object' and records[0]['event_list_count'] is None
+    assert records[0]['accepted_event_count'] == 1 and records[0]['code'] == 'valid'
+    assert 'cash_counting_visible' not in json.dumps(records)
+
+
+@pytest.mark.parametrize('events,code', [
+    ('private_scene_description', 'invalid_event_list_type'),
+    ([dict(kind='cash_counting_visible', time_sec=0., track_ids=[])] * 65, 'event_list_over_budget'),
+])
+def test_schema_v2_distinguishes_wrong_event_type_from_over_budget(events, code):
+    from deploy.ensemble import observation_schema
+    original = observation_schema.validate_observations
+    with diagnostics.trace_validation(validator_module=observation_schema) as records:
+        with pytest.raises(ValueError):
+            observation_schema.validate_observations(dict(valid(), events=events), window())
+    assert records[0]['code'] == code and not records[0]['strict_valid']
+    assert observation_schema.validate_observations is original
+    assert 'private_scene_description' not in json.dumps(records)
+
+
+def test_invalid_validator_does_not_leave_global_trace_locked():
+    with pytest.raises(TypeError, match='callable validate_observations'):
+        with diagnostics.trace_validation(validator_module=SimpleNamespace()):
+            pass
+    with diagnostics.trace_validation() as records:
+        base.validate_observations(valid(), window())
+    assert records[0]['strict_valid']
+
+
+@pytest.mark.parametrize('require_valid,statuses,exit_code', [
+    (True, {'context': 'valid', 'cash': 'valid'}, None),
+    (True, {'context': 'valid', 'cash': 'invalid_json_or_schema'}, 2),
+    (True, {'context': 'valid'}, 2),
+    (False, {'context': 'invalid_json_or_schema', 'cash': 'invalid_json_or_schema'}, None),
+])
+def test_diagnostic_cli_require_valid_only_gates_after_report_is_generated(monkeypatch, require_valid, statuses, exit_code):
+    from deploy.ensemble import diagnose_qwen
+    calls = []
+
+    def report(args):
+        calls.append(args)
+        return dict(parse_status=statuses, valid_observation_views=sum(value == 'valid' for value in statuses.values()))
+
+    monkeypatch.setattr(diagnose_qwen, 'diagnose', report)
+    monkeypatch.setattr(diagnose_qwen, 'event', lambda *args, **kwargs: None)
+    argv = ['diagnose_qwen.py', '--cache', 'cache', '--output', 'report.json']
+    if require_valid:
+        argv.append('--require-valid')
+    monkeypatch.setattr('sys.argv', argv)
+    if exit_code is None:
+        diagnose_qwen.main()
+    else:
+        with pytest.raises(SystemExit) as error:
+            diagnose_qwen.main()
+        assert error.value.code == exit_code
+    assert len(calls) == 1 and calls[0].require_valid is require_valid

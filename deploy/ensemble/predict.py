@@ -16,7 +16,7 @@ def extraction_backend(version):
     if version == 'forte_specialists_v1':
         from deploy.ensemble.run import protocol
         return protocol, 'run.py'
-    if version == 'forte_specialists_batched_v1':
+    if version in ('forte_specialists_batched_v1', 'forte_specialists_batched_v2'):
         from deploy.ensemble.run_batched import protocol
         return protocol, 'run_batched.py'
     raise ValueError('Predictor uses an unsupported extraction protocol version')

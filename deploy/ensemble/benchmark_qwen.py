@@ -18,7 +18,7 @@ def load_window(cache, video_sha=None):
     config = read_json(cache / 'protocol.json')
     if config['version'] == 'forte_specialists_v1':
         from deploy.ensemble.run import protocol
-    elif config['version'] == 'forte_specialists_batched_v1':
+    elif config['version'] in ('forte_specialists_batched_v1', 'forte_specialists_batched_v2'):
         from deploy.ensemble.run_batched import protocol
     else:
         raise ValueError('Unsupported extraction protocol')
