@@ -92,26 +92,70 @@ def plan_windows(total_frames, source_fps, seconds=16., overlap=4., sample_fps=4
     return windows
 
 
-def decode_window(capture, window, source_fps):
-    import cv2
-    from PIL import Image
+class SequentialFrames:
+    def __init__(self, video, windows, directory=None):
+        self.video = str(video)
+        self.directory = directory
+        self.selected = {i for window in windows for i in window['frame_indices']}
+        if not self.selected or any(not isinstance(i, int) or i < 0 for i in self.selected):
+            raise ValueError('Invalid selected frame indices')
+        self.next_index = 0
+        self.failed = False
+
+    def __enter__(self):
+        import cv2
+        from tempfile import TemporaryDirectory
+        from pathlib import Path
+        self.temporary = TemporaryDirectory(prefix='decoded-frames-', dir=self.directory)
+        self.root = Path(self.temporary.name)
+        self.capture = cv2.VideoCapture(self.video)
+        if not self.capture.isOpened():
+            self.__exit__(None, None, None)
+            raise ValueError('Could not open video for sequential frame decoding')
+        return self
+
+    def image(self, index):
+        import cv2
+        from PIL import Image
+        if self.failed:
+            raise ValueError('Sequential decoder previously failed; refusing incomplete frames')
+        if index not in self.selected:
+            raise ValueError('Frame is outside the selected input plan')
+        try:
+            while self.next_index <= index:
+                ok, frame = self.capture.read()
+                if not ok or frame is None:
+                    raise ValueError(f'Sequential decode stopped at frame {self.next_index}; '
+                                     f'requested frame {index}. No frame was substituted.')
+                if self.next_index in self.selected:
+                    picture = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                    picture = picture.resize((448, 448), Image.Resampling.BICUBIC)
+                    picture.save(self.root / f'{self.next_index}.png', compress_level=1)
+                self.next_index += 1
+            with Image.open(self.root / f'{index}.png') as picture:
+                return picture.copy()
+        except Exception:
+            self.failed = True
+            raise
+
+    def __exit__(self, exc_type, exc, tb):
+        self.capture.release()
+        self.temporary.cleanup()
+
+
+def decode_window(reader, window, source_fps):
     import torch
     from torchvision import transforms
-    from torchvision.transforms.functional import InterpolationMode
+    if not math.isfinite(source_fps) or source_fps <= 0:
+        raise ValueError('Invalid source FPS')
     transform = transforms.Compose([
-        transforms.Resize((448, 448), interpolation=InterpolationMode.BICUBIC),
         transforms.ToTensor(),
         transforms.Normalize((.485, .456, .406), (.229, .224, .225)),
     ])
     tensors, times = [], []
     for index in window['frame_indices']:
-        capture.set(cv2.CAP_PROP_POS_FRAMES, index)
-        ok, frame = capture.read()
-        actual = int(round(capture.get(cv2.CAP_PROP_POS_FRAMES))) - 1
-        if not ok or actual != index:
-            raise ValueError('Selected frame could not be decoded accurately; window requires review')
-        tensors.append(transform(Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))))
-        times.append(actual / source_fps)
+        tensors.append(transform(reader.image(index)))
+        times.append(index / source_fps)
     return torch.stack(tensors), times
 
 

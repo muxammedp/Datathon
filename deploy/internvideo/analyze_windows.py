@@ -6,7 +6,7 @@ import traceback
 from pathlib import Path
 
 from evaluate_dataset import file_hash, save_json
-from video_windows import add_visual_context, decode_window, plan_windows, scan_motion, summarize_windows, window_prompt
+from video_windows import SequentialFrames, add_visual_context, decode_window, plan_windows, scan_motion, summarize_windows, window_prompt
 
 
 def main():
@@ -88,63 +88,64 @@ def main():
             save_json(args.output / 'protocol.json', protocol)
         records = []
         save_json(args.output / 'summary.json', summarize_windows(records, len(windows)))
-        for window in windows:
-            began = time.monotonic()
-            record = {key: window[key] for key in ('index', 'start_sec', 'end_sec')}
-            fatal = None
-            try:
-                pixels, times = decode_window(capture, window, fps)
-                pixels = pixels.to(device='cuda', dtype=torch.bfloat16)
-                prefix = ''.join(f'Frame {i + 1}, absolute time {t:.3f} seconds: <image>\n'
-                                 for i, t in enumerate(times))
-                prompt = window_prompt(window, PROMPT)
-                if adapter_threshold is None:
-                    with torch.inference_mode():
-                        response = model.chat(tokenizer, pixels, prefix + prompt,
-                                              {'do_sample': False, 'max_new_tokens': 12},
-                                              num_patches_list=[1] * len(times), history=None, verbose=False)
-                    match = re.fullmatch(r'\s*([012])[.!]?\s*', response)
-                    decision = int(match.group(1)) if match else 2
-                    structured = bool(match)
-                    del response
-                else:
-                    with torch.no_grad():
-                        embeds, ids = frozen_inputs(model, tokenizer, pixels, times,
-                                                   window_prompt(window, binary_prompt(PROMPT)))
-                        logits = binary_logits(model.language_model, embeds.to('cuda'), ids)
-                        score = float(logits[0, 1] - logits[0, 0])
-                        if not torch.isfinite(logits).all():
-                            raise ValueError('Nonfinite adapted window score')
-                    decision, structured = int(score >= adapter_threshold), True
-                    record.update(score=score, threshold=adapter_threshold,
-                                  trained_adapter_used=metadata['best']['epoch'] > 0,
-                                  adapter_selected_epoch=metadata['best']['epoch'])
-                    del embeds, logits
-                record.update(status='done', sampled_frames=len(times),
-                              history_frames=len(window['history_indices']),
-                              detail_frames=len(window['detail_indices']),
-                              first_sample_sec=times[0], last_sample_sec=times[-1],
-                              max_context_sample_gap_sec=max(b - a for a, b in zip(times, times[1:])),
-                              max_detail_sample_gap_sec=max((b - a) / fps for a, b in
-                                                            zip(window['detail_indices'], window['detail_indices'][1:])),
-                              candidate_prediction={0: 'no_violation', 1: 'violation', 2: 'inconclusive'}[decision],
-                              structured_output=structured)
-                del pixels
-            except Exception as exc:
-                record.update(status='failed', error_type=type(exc).__name__)
-                log = args.output / f'window-{window["index"]}-error.log'
-                log.write_text(traceback.format_exc(), encoding='utf8')
-                if isinstance(exc, RuntimeError):
-                    fatal = exc
-            record['elapsed_sec'] = round(time.monotonic() - began, 2)
-            records.append(record)
-            save_json(args.output / 'windows.json', records)
-            save_json(args.output / 'summary.json', dict(summarize_windows(records, len(windows)),
-                      cross_window_memory='sparse_visual_history', actor_tracking=False,
-                      all_source_frames_motion_scanned=True))
-            print(json.dumps(dict(stage='window_processed', total=len(windows), **record)), flush=True)
-            if fatal is not None:
-                raise fatal
+        with SequentialFrames(args.video, windows, args.output) as reader:
+            for window in windows:
+                began = time.monotonic()
+                record = {key: window[key] for key in ('index', 'start_sec', 'end_sec')}
+                fatal = None
+                try:
+                    pixels, times = decode_window(reader, window, fps)
+                    pixels = pixels.to(device='cuda', dtype=torch.bfloat16)
+                    prefix = ''.join(f'Frame {i + 1}, absolute time {t:.3f} seconds: <image>\n'
+                                     for i, t in enumerate(times))
+                    prompt = window_prompt(window, PROMPT)
+                    if adapter_threshold is None:
+                        with torch.inference_mode():
+                            response = model.chat(tokenizer, pixels, prefix + prompt,
+                                                  {'do_sample': False, 'max_new_tokens': 12},
+                                                  num_patches_list=[1] * len(times), history=None, verbose=False)
+                        match = re.fullmatch(r'\s*([012])[.!]?\s*', response)
+                        decision = int(match.group(1)) if match else 2
+                        structured = bool(match)
+                        del response
+                    else:
+                        with torch.no_grad():
+                            embeds, ids = frozen_inputs(model, tokenizer, pixels, times,
+                                                       window_prompt(window, binary_prompt(PROMPT)))
+                            logits = binary_logits(model.language_model, embeds.to('cuda'), ids)
+                            score = float(logits[0, 1] - logits[0, 0])
+                            if not torch.isfinite(logits).all():
+                                raise ValueError('Nonfinite adapted window score')
+                        decision, structured = int(score >= adapter_threshold), True
+                        record.update(score=score, threshold=adapter_threshold,
+                                      trained_adapter_used=metadata['best']['epoch'] > 0,
+                                      adapter_selected_epoch=metadata['best']['epoch'])
+                        del embeds, logits
+                    record.update(status='done', sampled_frames=len(times),
+                                  history_frames=len(window['history_indices']),
+                                  detail_frames=len(window['detail_indices']),
+                                  first_sample_sec=times[0], last_sample_sec=times[-1],
+                                  max_context_sample_gap_sec=max(b - a for a, b in zip(times, times[1:])),
+                                  max_detail_sample_gap_sec=max((b - a) / fps for a, b in
+                                                                zip(window['detail_indices'], window['detail_indices'][1:])),
+                                  candidate_prediction={0: 'no_violation', 1: 'violation', 2: 'inconclusive'}[decision],
+                                  structured_output=structured)
+                    del pixels
+                except Exception as exc:
+                    record.update(status='failed', error_type=type(exc).__name__)
+                    log = args.output / f'window-{window["index"]}-error.log'
+                    log.write_text(traceback.format_exc(), encoding='utf8')
+                    if isinstance(exc, RuntimeError):
+                        fatal = exc
+                record['elapsed_sec'] = round(time.monotonic() - began, 2)
+                records.append(record)
+                save_json(args.output / 'windows.json', records)
+                save_json(args.output / 'summary.json', dict(summarize_windows(records, len(windows)),
+                          cross_window_memory='sparse_visual_history', actor_tracking=False,
+                          all_source_frames_motion_scanned=True))
+                print(json.dumps(dict(stage='window_processed', total=len(windows), **record)), flush=True)
+                if fatal is not None:
+                    raise fatal
         print(json.dumps(dict(stage='finished', **summarize_windows(records, len(windows)))), flush=True)
     finally:
         capture.release()

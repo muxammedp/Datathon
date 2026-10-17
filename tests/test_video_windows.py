@@ -91,11 +91,84 @@ def test_full_frame_motion_scan_and_selected_frame_decoding(tmp_path):
         assert len(scores) == 45 and max(scores) > 0
         plan = windows.plan_windows(45, 10., seconds=2, overlap=.5, sample_fps=4., max_frames=24)
         plan = windows.add_visual_context(plan, scores, 10., detail_frames=24, history_frames=8)
-        for row in plan:
-            pixels, times = windows.decode_window(capture, row, 10.)
-            assert pixels.shape == (len(row['frame_indices']), 3, 448, 448)
-            assert times == [i / 10. for i in row['frame_indices']]
+        with windows.SequentialFrames(path, plan, tmp_path) as reader:
+            for row in plan:
+                pixels, times = windows.decode_window(reader, row, 10.)
+                assert pixels.shape == (len(row['frame_indices']), 3, 448, 448)
+                assert times == [i / 10. for i in row['frame_indices']]
         with pytest.raises(ValueError, match='stopped at frame'):
             windows.scan_motion(capture, 46)
     finally:
         capture.release()
+
+
+def test_sequential_reader_never_seeks_and_reuses_history_exactly(tmp_path, monkeypatch):
+    import cv2
+    import numpy as np
+
+    class Capture:
+        position = 0
+        released = False
+
+        def isOpened(self):
+            return True
+
+        def read(self):
+            if self.position == 12:
+                return False, None
+            frame = np.full((8, 8, 3), self.position, dtype=np.uint8)
+            self.position += 1
+            return True, frame
+
+        def release(self):
+            self.released = True
+
+        def set(self, *args):
+            pytest.fail('Random seeks must not be used, including seeks to zero')
+
+        def get(self, *args):
+            pytest.fail('Unreliable decoder position metadata must not assign frame identity')
+
+    capture = Capture()
+    monkeypatch.setattr(cv2, 'VideoCapture', lambda path: capture)
+    plan = [{'frame_indices': [0, 3, 3, 7]}, {'frame_indices': [0, 3, 8, 11]}]
+    with windows.SequentialFrames('synthetic.mov', plan, tmp_path) as reader:
+        root = reader.root
+        for row in plan:
+            for index in row['frame_indices']:
+                assert np.all(np.array(reader.image(index)) == index)
+        assert capture.position == 12
+        assert len(list(root.glob('*.png'))) == 5
+        with pytest.raises(ValueError, match='outside'):
+            reader.image(2)
+    assert capture.released and not root.exists()
+
+
+def test_failed_sequential_decode_never_substitutes_or_continues(tmp_path, monkeypatch):
+    import cv2
+    import numpy as np
+
+    class Capture:
+        position = 0
+        released = False
+
+        def isOpened(self):
+            return True
+
+        def read(self):
+            self.position += 1
+            return (False, None) if self.position == 3 else (True, np.zeros((8, 8, 3), dtype=np.uint8))
+
+        def release(self):
+            self.released = True
+
+    capture = Capture()
+    monkeypatch.setattr(cv2, 'VideoCapture', lambda path: capture)
+    with windows.SequentialFrames('truncated.mov', [{'frame_indices': [0, 4]}], tmp_path) as reader:
+        root = reader.root
+        with pytest.raises(ValueError, match='stopped at frame 2'):
+            reader.image(4)
+        with pytest.raises(ValueError, match='previously failed'):
+            reader.image(0)
+        assert capture.position == 3
+    assert capture.released and not root.exists()

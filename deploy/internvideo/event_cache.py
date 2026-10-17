@@ -2,7 +2,7 @@ import json
 import time
 
 from evaluate_dataset import file_hash, save_json
-from video_windows import add_visual_context, decode_window, plan_windows, scan_motion, window_prompt
+from video_windows import SequentialFrames, add_visual_context, decode_window, plan_windows, scan_motion, window_prompt
 
 
 def binary_prompt(base_prompt):
@@ -29,31 +29,32 @@ def prepare(model, tokenizer, rows, args, prompt):
             plan = plan_windows(total, source_fps, args.window_sec, args.overlap_sec, args.fps, args.detail_frames)
             motion = scan_motion(capture, total)
             windows = add_visual_context(plan, motion, source_fps, args.detail_frames, args.history_frames)
-            for window in windows:
-                key = row['sha256'] + '-' + str(window['index'])
-                path = directory / (key + '.safetensors')
-                metadata_path = path.with_suffix('.json')
-                if path.exists() and metadata_path.exists():
-                    meta = json.loads(metadata_path.read_text(encoding='utf8'))
-                    if file_hash(path) != meta['cache_sha256'] or meta['frame_indices'] != window['frame_indices']:
-                        raise ValueError('Window cache does not match the locked input plan')
-                    ids = meta['answer_ids']
-                else:
-                    pixels, times = decode_window(capture, window, source_fps)
-                    pixels = pixels.to('cuda', dtype=torch.bfloat16)
-                    embeds, ids = frozen_inputs(model, tokenizer, pixels, times, window_prompt(window, prompt))
-                    if not torch.isfinite(embeds).all():
-                        raise ValueError('Nonfinite window embeddings')
-                    temporary = path.with_suffix('.tmp')
-                    save_file({'embeds': embeds}, str(temporary))
-                    temporary.replace(path)
-                    save_json(metadata_path, dict(answer_ids=ids, cache_sha256=file_hash(path),
-                                                  frame_indices=window['frame_indices']))
-                    del pixels, embeds
-                if answer_ids is not None and answer_ids != ids:
-                    raise ValueError('Answer tokenization changed between windows')
-                answer_ids = ids
-                window['cache_key'] = key
+            with SequentialFrames(args.dataset / row['file'], windows, directory) as reader:
+                for window in windows:
+                    key = row['sha256'] + '-' + str(window['index'])
+                    path = directory / (key + '.safetensors')
+                    metadata_path = path.with_suffix('.json')
+                    if path.exists() and metadata_path.exists():
+                        meta = json.loads(metadata_path.read_text(encoding='utf8'))
+                        if file_hash(path) != meta['cache_sha256'] or meta['frame_indices'] != window['frame_indices']:
+                            raise ValueError('Window cache does not match the locked input plan')
+                        ids = meta['answer_ids']
+                    else:
+                        pixels, times = decode_window(reader, window, source_fps)
+                        pixels = pixels.to('cuda', dtype=torch.bfloat16)
+                        embeds, ids = frozen_inputs(model, tokenizer, pixels, times, window_prompt(window, prompt))
+                        if not torch.isfinite(embeds).all():
+                            raise ValueError('Nonfinite window embeddings')
+                        temporary = path.with_suffix('.tmp')
+                        save_file({'embeds': embeds}, str(temporary))
+                        temporary.replace(path)
+                        save_json(metadata_path, dict(answer_ids=ids, cache_sha256=file_hash(path),
+                                                      frame_indices=window['frame_indices']))
+                        del pixels, embeds
+                    if answer_ids is not None and answer_ids != ids:
+                        raise ValueError('Answer tokenization changed between windows')
+                    answer_ids = ids
+                    window['cache_key'] = key
             all_windows.append(windows)
         finally:
             capture.release()
