@@ -113,12 +113,14 @@ def benchmark(args):
                 runs.append(record)
                 pair[name] = result
                 event('benchmark_window', **record)
+            schemas_valid = all(status == 'valid' for row in pair.values()
+                                for status in row['parse_status'].values())
             results.append(dict(repeat=repeat + 1,
                                 max_score_difference=max(abs(pair['serial'][v + '_score'] - pair['batched'][v + '_score'])
                                                          for v in ('context', 'cash')),
-                                observations_equal=pair['serial']['observations'] == pair['batched']['observations'],
-                                both_schemas_valid=all(status == 'valid' for row in pair.values()
-                                                       for status in row['parse_status'].values())))
+                                observations_equal=(pair['serial']['observations'] == pair['batched']['observations'])
+                                                   if schemas_valid else None,
+                                both_schemas_valid=schemas_valid))
         medians = {name: statistics.median(r['elapsed_sec'] for r in runs if r['execution'] == name)
                    for name in ('serial', 'batched')}
         report = dict(version='qwen_batch_benchmark_v1', video_sha256=identity, window_index=0,

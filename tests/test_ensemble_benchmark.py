@@ -37,7 +37,8 @@ def test_benchmark_rejects_modified_inputs_without_modifying_existing_cache(tmp_
         bench.load_window(cache)
 
 
-def test_benchmark_shares_one_model_alternates_order_and_reports_no_observations(tmp_path, monkeypatch):
+@pytest.mark.parametrize('schema_valid', [True, False])
+def test_benchmark_shares_one_model_alternates_order_and_reports_no_observations(tmp_path, monkeypatch, schema_valid):
     cache, _ = fixture_cache(tmp_path)
     calls, loads, released, models = [], [], [], []
 
@@ -58,8 +59,9 @@ def test_benchmark_shares_one_model_alternates_order_and_reports_no_observations
             calls.append(type(self).__name__)
             models.append(self.model)
             assert memory == [] and len(window['paths']) == 1
+            status = 'valid' if schema_valid else 'invalid_json_or_schema'
             return dict(sampled_frames=1, model_passes=4 if type(self).__name__ == 'Serial' else 2,
-                        context_score=.3, cash_score=.1, parse_status=dict(context='valid', cash='valid'),
+                        context_score=.3, cash_score=.1, parse_status=dict(context=status, cash=status),
                         observations=dict(private_test_text='not exported'))
 
         def release(self):
@@ -76,7 +78,8 @@ def test_benchmark_shares_one_model_alternates_order_and_reports_no_observations
     report = bench.benchmark(args)
     assert calls == ['Serial', 'Batch', 'Batch', 'Serial']
     assert len(loads) == len(released) == 1 and all(model is models[0] for model in models)
-    assert all(row['observations_equal'] for row in report['comparisons'])
+    assert all(row['observations_equal'] is (True if schema_valid else None) for row in report['comparisons'])
+    assert all(row['both_schemas_valid'] is schema_valid for row in report['comparisons'])
     assert not report['accuracy_measured'] and not report['full_video_latency_measured']
     assert 'private_test_text' not in args.output.read_text()
     with pytest.raises(ValueError, match='new report file'):
