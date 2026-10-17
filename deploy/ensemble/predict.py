@@ -12,6 +12,16 @@ if __package__ in (None, ''):
 from deploy.ensemble.common import HERE, file_hash, load_payload, read_json, save_json
 
 
+def extraction_backend(version):
+    if version == 'forte_specialists_v1':
+        from deploy.ensemble.run import protocol
+        return protocol, 'run.py'
+    if version == 'forte_specialists_batched_v1':
+        from deploy.ensemble.run_batched import protocol
+        return protocol, 'run_batched.py'
+    raise ValueError('Predictor uses an unsupported extraction protocol version')
+
+
 def candidate_evidence(media, action_scores, qwen, media_root):
     if len(action_scores) != len(media['windows']):
         raise ValueError('Action localization scores do not match media windows')
@@ -43,6 +53,7 @@ def infer(args):
     video = args.video.resolve()
     bundle = read_json(args.bundle)
     config = bundle['extraction_protocol']
+    protocol, extractor = extraction_backend(config.get('version'))
     settings = config['settings']
     defaults = dict(window_sec=16., overlap_sec=4., sample_fps=4., max_frames_per_window=64, max_edge=848)
     if any(settings.get(key) != value for key, value in defaults.items()) or set(settings) != set(defaults) | {'device', 'qwen_frames', 'qwen_new_tokens'}:
@@ -51,7 +62,6 @@ def infer(args):
         raise ValueError('Predictor and extraction fingerprint differ')
     if any(config['camera'].get(key) is not None for key in ('cashier_zone', 'counter_crop')) and not args.same_camera:
         raise ValueError('This bundle uses configured camera zones. Use --same-camera only for the same unchanged viewpoint; new angles need a full-scene bundle.')
-    from deploy.ensemble.run import protocol
     if protocol(settings, config['camera'])['fingerprint'] != config['fingerprint']:
         raise ValueError('Predictor was trained with different code/models/settings; use its matching source revision')
     args.cache.mkdir(parents=True, exist_ok=True)
@@ -60,7 +70,7 @@ def infer(args):
     remaining = args.timeout - (time.monotonic() - began)
     if remaining <= 0:
         raise TimeoutError('Processing time budget exhausted before extraction')
-    command = [sys.executable, str(HERE / 'run.py'), '--video', str(video), '--models', str(args.models.resolve()),
+    command = [sys.executable, str(HERE / extractor), '--video', str(video), '--models', str(args.models.resolve()),
                '--output', str(args.cache.resolve()), '--camera', str(camera.resolve()), '--device', settings['device'],
                '--qwen-frames', str(settings['qwen_frames']), '--qwen-new-tokens', str(settings['qwen_new_tokens'])]
     try:

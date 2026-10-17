@@ -124,7 +124,20 @@ def cli(fixture, monkeypatch, *extra):
     return fixture.common.read_json(args.output)
 
 
-def test_cli_completes_synthetic_video_with_real_fusion_and_exact_existing_evidence(prediction, monkeypatch):
+def set_protocol(fixture, module_name):
+    module = importlib.import_module('deploy.ensemble.' + module_name)
+    config = fixture.bundle['extraction_protocol']
+    updated = module.protocol(config['settings'], config['camera'])
+    config.clear()
+    config.update(updated)
+    fixture.bundle['fingerprint'] = config['fingerprint']
+    fixture.common.save_json(fixture.args.bundle, fixture.bundle)
+
+
+@pytest.mark.parametrize('extractor', ['run', 'run_batched'])
+def test_cli_completes_synthetic_video_with_real_fusion_and_exact_existing_evidence(prediction, monkeypatch, extractor):
+    set_protocol(prediction, extractor)
+    assert not (prediction.args.cache / 'protocol.json').exists()
     result = cli(prediction, monkeypatch)
     expected = prediction.fusion.predict_record(prediction.bundle, prediction.action, prediction.qwen)
     assert result['complete'] and result['within_time_budget']
@@ -138,7 +151,51 @@ def test_cli_completes_synthetic_video_with_real_fusion_and_exact_existing_evide
     assert evidence['window_index'] == 1 and evidence['frame_index'] == 20 and evidence['time_sec'] == 2.
     assert Path(evidence['frame_path']) == (prediction.media_root / 'frames/1-1.png').resolve()
     assert not evidence['verified_violation'] and not evidence['timestamps_verified_pts']
+    assert Path(prediction.state.processes[0].command[1]).name == extractor + '.py'
     assert prediction.state.processes[0].command[2:4] == ['--video', str(prediction.args.video.resolve())]
+
+
+def test_unknown_extraction_protocol_is_rejected_before_loading_models_or_spawning(prediction, monkeypatch):
+    prediction.bundle['extraction_protocol']['version'] = 'unknown_future_backend'
+    prediction.common.save_json(prediction.args.bundle, prediction.bundle)
+    with pytest.raises(SystemExit):
+        cli(prediction, monkeypatch)
+    result = prediction.common.read_json(prediction.args.output)
+    assert result['prediction'] == 'insufficient_data' and not result['complete']
+    assert 'unsupported extraction protocol version' in result['error']
+    assert not prediction.state.processes
+
+
+@pytest.mark.parametrize('extractor', ['run', 'run_batched'])
+def test_mixed_protocol_scores_cannot_be_used_with_a_trained_bundle(prediction, monkeypatch, extractor):
+    set_protocol(prediction, extractor)
+    other_module = importlib.import_module('deploy.ensemble.' + ('run_batched' if extractor == 'run' else 'run'))
+    config = prediction.bundle['extraction_protocol']
+    other_fingerprint = other_module.protocol(config['settings'], config['camera'])['fingerprint']
+    assert other_fingerprint != config['fingerprint']
+    original = prediction.common.save_payload
+
+    def save_mixed(path, payload, fingerprint):
+        original(path, payload, other_fingerprint if Path(path).name == 'qwen.json' else fingerprint)
+
+    monkeypatch.setattr(prediction.common, 'save_payload', save_mixed)
+    with pytest.raises(SystemExit):
+        cli(prediction, monkeypatch)
+    result = prediction.common.read_json(prediction.args.output)
+    assert not result['complete'] and result['prediction'] == 'insufficient_data'
+    assert result['error_type'] == 'ValueError'
+    assert len(prediction.state.processes) == 1
+
+
+@pytest.mark.parametrize('extractor', ['run', 'run_batched'])
+def test_bundle_protocol_fingerprint_change_is_rejected_before_extraction(prediction, extractor):
+    set_protocol(prediction, extractor)
+    prediction.bundle['extraction_protocol']['fingerprint'] = 'c' * 64
+    prediction.bundle['fingerprint'] = 'c' * 64
+    prediction.common.save_json(prediction.args.bundle, prediction.bundle)
+    with pytest.raises(ValueError, match='different code/models/settings'):
+        prediction.module.infer(prediction.args)
+    assert not prediction.state.processes
 
 
 def test_evidence_rejects_changed_image_and_path_escape(prediction):
