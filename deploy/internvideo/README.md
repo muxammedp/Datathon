@@ -4,6 +4,42 @@
 
 ## Запуск в Jupyter
 
+### Обновления через Git для уже установленного сервера
+
+Если модель и данные уже находятся в `~/forte-internvideo`, один раз выполните:
+
+```bash
+git clone https://github.com/muxammedp/Datathon.git ~/Datathon
+cd ~/Datathon
+python3 deploy/internvideo/connect_existing.py ~/forte-internvideo
+cd deploy/internvideo
+.venv/bin/python evaluate_dataset.py --dataset open-dataset --output results/baseline --retry-failed
+```
+
+Если репозиторий приватный, GitHub потребует авторизацию пользователя. Не вставляйте
+токены в URL репозитория. Если `~/Datathon` уже существует, сначала проверьте его
+содержимое: повторное клонирование поверх существующей папки не требуется.
+
+Скрипт создаёт только ссылки на `.venv`, `models`, `open-dataset`, `results` в новой
+копии кода; оригиналы остаются в `~/forte-internvideo`. Он отказывается заменять
+существующие файлы. Старую папку нужно сохранить. Установка и обучение не запускаются.
+Ссылки и данные исключены из Git. Веса повторно скачивать не нужно.
+
+Для последующих обновлений после завершения текущего запуска:
+
+```bash
+cd ~/Datathon
+git pull --ff-only
+cd deploy/internvideo
+```
+
+Теперь запускайте скрипты из `~/Datathon/deploy/internvideo`. Если изменились
+параметры или код анализа, используйте новый каталог `--output`, чтобы не смешивать
+результаты разных версий. Обновление Git само по себе не начинает обучение и не
+меняет уже работающий Python-процесс.
+
+### Установка с нуля из архива
+
 Загрузите ForteVision-InternVideo-server.zip стрелкой Upload в файловой панели Jupyter. В Terminal выполните из папки с архивом:
 
 ```bash
